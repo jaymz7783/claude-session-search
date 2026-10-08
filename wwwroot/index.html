@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Search</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍻</text></svg>">
+<style>
+  :root {
+    --ground: #f3f6f5;
+    --surface: #ffffff;
+    --surface-2: #eaf0ee;
+    --ink: #171b1a;
+    --muted: #5c6a66;
+    --faint: #8a9793;
+    --line: #dbe4e1;
+    --accent: #1f7a6c;
+    --accent-ink: #0f4c43;
+    --on-accent: #ffffff;
+    --good: #2f9e5b;
+    --warn: #c98a12;
+    --idle: #a3aeaa;
+    --heat-0: #e3eae8;
+    --heat-3: #1f7a6c;
+    --mono: ui-monospace, "SF Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #101413;
+      --surface: #171d1c;
+      --surface-2: #1d2422;
+      --ink: #e7ece9;
+      --muted: #97a29d;
+      --faint: #5f6b67;
+      --line: #283330;
+      --accent: #4fd3b8;
+      --accent-ink: #bdf2e6;
+      --on-accent: #0c1513;
+      --good: #4cc47e;
+      --warn: #e7b443;
+      --idle: #4b5753;
+      --heat-0: #1f2826;
+      --heat-3: #4fd3b8;
+    }
+  }
+  /* 🏁 race weekend — F1 red on carbon */
+  :root[data-theme="race"] {
+    --ground: #0d0d0f;
+    --surface: #17171b;
+    --surface-2: #1f1f25;
+    --ink: #f3f3f5;
+    --muted: #a5a5b0;
+    --faint: #66666f;
+    --line: #2a2a31;
+    --accent: #e10600;
+    --accent-ink: #ff8a85;
+    --on-accent: #ffffff;
+    --good: #00d26a;
+    --warn: #ffd400;
+    --idle: #45454d;
+    --heat-0: #222228;
+    --heat-3: #ff2a22;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--sans); background: var(--ground); color: var(--ink); }
+  button { font: inherit; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 32px 16px 80px; }
+
+  /* header */
+  .top { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  h1 { font-family: var(--mono); font-size: 24px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .top-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .ghost-btn {
+    font-family: var(--mono); font-size: 11.5px; background: var(--surface); border: 1px solid var(--line);
+    color: var(--muted); border-radius: 7px; padding: 6px 10px; cursor: pointer;
+  }
+  .ghost-btn:hover { color: var(--ink); border-color: var(--faint); }
+  .ghost-btn.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  kbd {
+    font-family: var(--mono); font-size: 10.5px; padding: 1px 5px; border-radius: 4px;
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--muted);
+  }
+  :root[data-theme="race"] .top { padding-top: 14px; position: relative; }
+  :root[data-theme="race"] .top::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 8px; border-radius: 2px;
+    background: repeating-conic-gradient(#f3f3f5 0 25%, #0d0d0f 0 50%) 0 0 / 8px 8px;
+  }
+  :root[data-theme="race"] h1 { font-style: italic; letter-spacing: -.02em; }
+
+  /* stat tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .v { font-family: var(--mono); font-size: 24px; font-weight: 700; line-height: 1.1; }
+  .tile .l { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .tile.clickable { cursor: pointer; }
+  .tile.clickable:hover { border-color: var(--faint); }
+  :root[data-theme="race"] .tile { border-top: 3px solid var(--accent); }
+
+  /* this-week strip */
+  .week { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 22px; scrollbar-width: thin; }
+  .week-chip {
+    flex: none; display: flex; align-items: center; gap: 8px; max-width: 260px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px;
+    cursor: pointer; font-size: 13px;
+  }
+  .week-chip:hover { border-color: var(--faint); }
+  .week-chip .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .week-chip .t { font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+  .section-h {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); margin: 24px 2px 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-h .ghost-btn { text-transform: none; letter-spacing: 0; padding: 2px 8px; font-size: 11px; }
+  .section-h.toggle { cursor: pointer; user-select: none; width: fit-content; }
+  .section-h.toggle:hover { color: var(--muted); }
+  .section-h .caret { display: inline-block; transition: transform .15s ease; font-size: 10px; }
+  .section-h.collapsed .caret { transform: rotate(-90deg); }
+
+  /* search */
+  .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  input[type="search"], .field input, .field textarea, .palette input {
+    font-family: var(--sans); font-size: 16px; padding: 12px 14px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%;
+  }
+  input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .tabs button {
+    font-family: var(--mono); font-size: 12px; padding: 7px 12px; border: 1px solid var(--line);
+    border-radius: 999px; background: var(--surface); color: var(--muted); cursor: pointer;
+  }
+  .tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .status-line { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: auto; }
+
+  .active-filter { display: none; gap: 8px; align-items: center; margin: 4px 0 14px; font-size: 13px; color: var(--muted); }
+  .active-filter.on { display: flex; }
+
+  /* ticket / repo view panel */
+  .focus-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .focus-panel h2 { margin: 0 0 12px; font-family: var(--mono); font-size: 18px; color: var(--accent); }
+  .focus-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .focus-grid { grid-template-columns: 1fr; } }
+  .focus-panel h3, .drawer h3 {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--faint); margin: 0 0 8px; font-weight: 600;
+  }
+  .timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); }
+  .timeline li { position: relative; margin: 0 0 12px; cursor: pointer; }
+  .timeline li::before {
+    content: ""; position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--surface);
+  }
+  .timeline .tl-name { font-weight: 600; font-size: 14px; }
+  .timeline .tl-when { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .link-list { list-style: none; margin: 0 0 14px; padding: 0; font-size: 13px; }
+  .link-list li { margin-bottom: 6px; }
+  .link-list a, .link-btn { color: var(--accent-ink); text-decoration: none; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+  .link-list a:hover, .link-btn:hover { text-decoration: underline; }
+  .link-list .d { color: var(--muted); font-size: 12px; }
+
+  /* cards */
+  .hit {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 10px; cursor: pointer; position: relative;
+  }
+  .hit:hover { border-color: var(--faint); }
+  .hit.kb { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hit.pinned { border-left: 3px solid var(--accent); }
+  .hit.archived { opacity: .55; }
+  .hit.archived:hover { opacity: .85; }
+  .hit-meta { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; white-space: nowrap; }
+  .badge {
+    font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; border-radius: 5px;
+    background: var(--surface-2); color: var(--accent-ink); border: 1px solid var(--line); white-space: nowrap;
+  }
+  .badge.pos { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; }
+  .badge.ticket { color: var(--accent); cursor: pointer; }
+  .badge.repo { color: var(--muted); cursor: pointer; }
+  .badge.ticket:hover, .badge.repo:hover { border-color: var(--accent); }
+  a.badge.pr { text-decoration: none; color: var(--muted); }
+  a.badge.pr:hover { color: var(--ink); border-color: var(--faint); }
+  .hit-date, .last-active { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .last-active { color: var(--faint); }
+  .hit-title { font-weight: 600; margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+  .hit.transcript .hit-title { font-size: 17px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--idle); display: inline-block; }
+  .dot.good { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+  .dot.warn { background: var(--warn); }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; margin: 0 0 6px; }
+  .hit-subtitle {
+    color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0 0 6px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .note { font-size: 13px; color: var(--ink); background: var(--surface-2); border-left: 3px solid var(--warn); padding: 6px 10px; border-radius: 4px; margin: 0 0 8px; }
+  .hit-snip { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0 0 6px; }
+  .hit-snip mark { background: none; color: var(--accent-ink); font-weight: 700; }
+  .strip { display: flex; gap: 2px; justify-content: flex-end; overflow: hidden; margin: 8px 0 2px; min-width: 0; }
+  .strip i { flex: none; width: 5px; height: 12px; border-radius: 1.5px; background: var(--heat-0); }
+  .strip i.on { background: var(--heat-3); }
+  .hit-footer { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .session-id { font-family: var(--mono); font-size: 11px; color: var(--faint); user-select: all; white-space: nowrap; cursor: text; }
+  .sid-row { display: flex; align-items: baseline; gap: 6px; margin: -2px 0 6px; }
+  .sid-row .session-id { font-size: 10px; letter-spacing: -.01em; }
+  .sid-label {
+    font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; flex: none;
+  }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--muted); cursor: pointer; font-size: 13px;
+  }
+  .icon-btn:hover { color: var(--ink); border-color: var(--faint); }
+  .icon-btn.first { margin-left: auto; }
+  .icon-btn.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); }
+  .icon-btn:not(.on)[data-act="pin"] { filter: grayscale(1); opacity: .7; }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .empty { color: var(--faint); font-size: 13px; padding: 20px 4px; }
+  /* min() keeps a single full-width column on phones instead of overflowing */
+  .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 10px; }
+  /* min-width: 0 lets grid items shrink below the activity strip's ~630px intrinsic width */
+  .grid-cards .hit { margin-bottom: 0; display: flex; flex-direction: column; min-width: 0; }
+  .grid-cards .hit .strip { margin-top: auto; padding-top: 8px; }
+
+  /* drawer */
+  .scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .35); opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 10; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 100vw); background: var(--ground);
+    border-left: 1px solid var(--line); transform: translateX(100%); transition: transform .2s ease;
+    z-index: 11; overflow-y: auto; padding: 22px 22px 60px;
+  }
+  .drawer.on { transform: none; }
+  .drawer-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .drawer-head h2 { margin: 0; font-size: 21px; flex: 1; }
+  .drawer section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 520px) { .kv { grid-template-columns: repeat(2, 1fr); } }
+  .kv div { font-size: 12px; color: var(--muted); }
+  .kv b { display: block; font-family: var(--mono); font-size: 18px; color: var(--ink); }
+  .heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 11px); grid-auto-columns: 11px; gap: 3px; overflow-x: auto; padding-bottom: 4px; }
+  .heat i { width: 11px; height: 11px; border-radius: 2px; background: var(--heat-0); }
+  .heat i.on { background: var(--heat-3); }
+  .heat-legend { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 6px; display: flex; justify-content: space-between; }
+  .starthere { white-space: pre-wrap; font-size: 13px; line-height: 1.55; background: var(--surface-2); border-left: 3px solid var(--warn); padding: 10px 12px; border-radius: 4px; }
+  .prompts { list-style: none; margin: 0; padding: 0; }
+  .prompts li { font-size: 13px; line-height: 1.5; padding: 8px 10px; background: var(--surface-2); border-radius: 8px; margin-bottom: 6px; }
+  .files { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 11.5px; }
+  .files li { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .files li span:first-child { overflow-wrap: anywhere; flex: 1; }
+  .files li span:last-child { color: var(--faint); }
+  .memdoc { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; line-height: 1.55; max-height: 420px; overflow-y: auto; background: var(--surface-2); padding: 12px; border-radius: 8px; cursor: text; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field textarea { font-size: 14px; padding: 9px 11px; }
+  .field textarea { min-height: 70px; resize: vertical; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .primary-btn { background: var(--accent); color: var(--on-accent); border: 0; border-radius: 7px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+
+  /* ⌘K palette */
+  .palette-wrap { position: fixed; inset: 0; z-index: 20; display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; background: rgb(0 0 0 / .4); }
+  .palette-wrap.on { display: flex; }
+  .palette { width: min(620px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgb(0 0 0 / .35); }
+  .palette input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; font-size: 17px; padding: 16px 18px; }
+  .palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
+  .palette li { padding: 9px 12px; border-radius: 8px; cursor: pointer; display: flex; gap: 10px; align-items: center; }
+  .palette li.sel { background: var(--surface-2); }
+  .palette li .pn { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .palette li .pt { font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+  .palette .hint { font-size: 11.5px; color: var(--faint); padding: 8px 14px; border-top: 1px solid var(--line); display: flex; gap: 14px; flex-wrap: wrap; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
+    background: var(--ink); color: var(--ground); padding: 9px 16px; border-radius: 8px; font-size: 13px;
+    transition: all .2s; z-index: 30; pointer-events: none;
+  }
+  .toast.on { opacity: 1; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1 id="h1">🍻 Session Search</h1>
+      <p class="sub" id="sub">Every Claude session, what it's about, and where you left off.</p>
+    </div>
+    <div class="top-actions">
+      <button class="ghost-btn" id="openPalette" title="Jump to a session">⌘K</button>
+      <button class="ghost-btn" id="raceToggle" title="Race weekend theme">🏁</button>
+      <button class="ghost-btn" id="reindex">reindex</button>
+    </div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="section-h" id="weekH"></div>
+  <div class="week" id="week"></div>
+
+  <div class="search-row">
+    <input type="search" id="q" placeholder="Search for a ticket, server name, error, decision…  ( / )" autocomplete="off">
+  </div>
+  <div class="tabs">
+    <button data-type="">All</button>
+    <button data-type="transcript" class="active">Transcripts</button>
+    <button data-type="memory">Memory</button>
+    <span class="status-line" id="status">loading…</span>
+  </div>
+  <div class="active-filter" id="activeFilter">
+    filtered to <span class="badge" id="activeFilterLabel"></span>
+    <button class="ghost-btn" id="clearFilter">clear ×</button>
+  </div>
+  <div id="focus"></div>
+  <div id="results"></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Session details"></aside>
+
+<div class="palette-wrap" id="paletteWrap">
+  <div class="palette" role="dialog" aria-label="Jump to session">
+    <input id="pq" placeholder="Jump to a session — name, ticket, repo, id…" autocomplete="off">
+    <ul id="plist"></ul>
+    <div class="hint"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> copy resume command</span><span><kbd>⇧</kbd><kbd>↵</kbd> open details</span><span><kbd>esc</kbd> close</span></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const q = $('q'), results = $('results'), statusEl = $('status'), tabs = document.querySelectorAll('.tabs button');
+
+  let activeType = 'transcript';
+  let filter = null;              // { kind: 'ticket' | 'repo', value }
+  let showArchived = false;
+  // collapsed browse sections, remembered per browser
+  let collapsed = {};
+  try { collapsed = JSON.parse(localStorage.getItem('ss-collapsed') || '{}'); } catch {}
+  function sectionHead(key, label, count) {
+    const c = !!collapsed[key];
+    return `<div class="section-h toggle ${c ? 'collapsed' : ''}" data-section="${key}" role="button" tabindex="0" aria-expanded="${!c}"><span class="caret">▾</span>${label} · ${count}</div>`;
+  }
+  let transcripts = [];           // full transcript list: dashboard, week strip, palette, focus views
+  let kbIndex = -1;
+  let debounceHandle;
+
+  // ---------- theme + vocabulary ----------
+  const VOCAB = {
+    normal: {
+      title: '🍻 Session Search', sub: "Every Claude session, what it's about, and where you left off.",
+      pinned: '📌 Pinned', recent: 'Recent', all: 'All', archived: 'Archived', week: 'Active this week',
+      sessions: 'sessions', activeWeek: 'active this week', open: 'open threads', tickets: 'tickets', days: 'days of work', spend: 'est. API cost',
+      daysUnit: 'days active', good: 'active this week', warn: 'has a START HERE waiting', idle: 'idle',
+      pin: 'Pin', unpin: 'Unpin', archive: 'Archive', unarchive: 'Unarchive'
+    },
+    race: {
+      title: '🏎️ Session Search GP', sub: 'Lights out and away we go.',
+      pinned: '🏁 The Grid', recent: 'Paddock', all: 'Paddock', archived: 'Retired', week: 'This race weekend',
+      sessions: 'entries', activeWeek: 'on track this week', open: 'box, box', tickets: 'tickets', days: 'laps', spend: 'est. API cost',
+      daysUnit: 'laps', good: 'on track', warn: 'box, box — start here waiting', idle: 'parc fermé',
+      pin: 'Put on the grid', unpin: 'Drop from grid', archive: 'Retire', unarchive: 'Un-retire'
+    }
+  };
+  let theme = 'normal';
+  try { theme = localStorage.getItem('ss-theme') === 'race' ? 'race' : 'normal'; } catch {}
+  if (new URLSearchParams(location.search).has('race')) theme = 'race';   // ?race — lights out on demand
+  const V = () => VOCAB[theme];
+  function applyTheme() {
+    if (theme === 'race') document.documentElement.dataset.theme = 'race';
+    else delete document.documentElement.dataset.theme;
+    $('raceToggle').classList.toggle('on', theme === 'race');
+    $('h1').textContent = V().title;
+    $('sub').textContent = V().sub;
+  }
+
+  // ---------- helpers ----------
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+  const renderSnippet = snip => escapeHtml(snip).replaceAll('[[', '<mark>').replaceAll(']]', '</mark>');
+  const hasFlag = (h, f) => (h.flags || '').split(' ').includes(f);
+  const ticketsOf = h => (h.ticket || '').split(',').map(x => x.trim()).filter(Boolean);
+  const reposOf = h => (h.summary?.repos || []).map(r => r.name);
+  const sum = h => h.summary || {};
+  const DAY = 86400000;
+  const localDay = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; };
+  const daysLabel = n => theme === 'race' ? `${n} lap${n === 1 ? '' : 's'}` : `${n} day${n === 1 ? '' : 's'} active`;
+  const daysShort = n => theme === 'race' ? `${n} lap${n === 1 ? '' : 's'}` : `${n} day${n === 1 ? '' : 's'}`;
+  const prLabel = u => u.replace(/^https:\/\/github\.com\/[^/]+\//, '').replace('/pull/', '#');
+
+  function timeAgo(iso) {
+    const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+    if (mins < 60) return `${Math.max(mins, 1)}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.round(hrs / 24);
+    return days < 30 ? `${days}d ago` : new Date(iso).toLocaleDateString();
+  }
+
+  // green: touched in the last 7 days · amber: older but its memory has a START HERE · grey: idle/archived
+  function health(h) {
+    if (h.docType !== 'transcript' || hasFlag(h, 'archived')) return 'idle';
+    if (Date.now() - new Date(h.lastActive || 0) < 7 * DAY) return 'good';
+    return sum(h).startHere ? 'warn' : 'idle';
+  }
+
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1600);
+  }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+  }
+  async function copyResume(id) { await copyText(`claude --resume ${id}`); toast('Copied: claude --resume …' + id.slice(-6)); }
+
+  // ---------- dashboard ----------
+  async function refreshStatus() {
+    const s = await (await fetch('/api/status')).json();
+    if (s.indexing) { statusEl.textContent = 'indexing…'; setTimeout(refreshStatus, 1000); return; }
+    const t = s.lastCompletedUtc ? timeAgo(s.lastCompletedUtc) : 'never';
+    statusEl.textContent = `${s.transcriptCount} transcripts · ${s.memoryDocCount} memory · indexed ${t}`;
+    if (s.lastError) statusEl.textContent += ` · error: ${s.lastError}`;
+  }
+
+  async function loadTranscripts() {
+    transcripts = await (await fetch('/api/list?type=transcript&limit=500')).json();
+    renderDashboard();
+  }
+
+  function renderDashboard() {
+    const live = transcripts.filter(h => !hasFlag(h, 'archived'));
+    const week = live.filter(h => Date.now() - new Date(h.lastActive || 0) < 7 * DAY);
+    const open = live.filter(h => health(h) === 'warn');
+    const tickets = new Set(live.flatMap(ticketsOf));
+    const days = new Set(transcripts.flatMap(h => sum(h).activeDays || []));
+    const spend = transcripts.reduce((a, h) => a + (sum(h).costUsd || 0), 0);
+    const v = V();
+    const tl = VOCAB.normal;   // stat tiles keep plain labels in every theme
+    $('tiles').innerHTML = [
+      [live.length, tl.sessions, ''],
+      [week.length, tl.activeWeek, ''],
+      [open.length, tl.open, 'open'],
+      [tickets.size, tl.tickets, ''],
+      [days.size, tl.days, ''],
+      [spend ? '$' + Math.round(spend).toLocaleString() : '—', tl.spend, '']
+    ].map(([val, label, act]) => `<div class="tile ${act ? 'clickable' : ''}" ${act ? `data-act="${act}" title="Show them"` : ''} ${label === tl.spend ? 'title="List-price API equivalent from Claude Code cost records — not your bill. Sessions that predate cost tracking count as $0."' : ''}><div class="v">${val}</div><div class="l">${escapeHtml(label)}</div></div>`).join('');
+
+    $('weekH').textContent = `${v.week} · ${week.length}`;
+    $('week').innerHTML = week.length ? week.map(h => `
+      <div class="week-chip" data-open="${escapeHtml(h.docId)}" title="${escapeHtml(h.title)}">
+        <span class="dot ${health(h)}"></span><span class="n">${escapeHtml(h.title)}</span><span class="t">${timeAgo(h.lastActive)}</span>
+      </div>`).join('') : `<div class="empty">nothing this week</div>`;
+  }
+
+  $('tiles').addEventListener('click', e => {
+    if (!e.target.closest('[data-act="open"]')) return;
+    // "open threads": the amber ones — stale, but memory says there's a next step waiting
+    const open = transcripts.filter(h => health(h) === 'warn');
+    q.value = ''; filter = null; updateFilterBar(); $('focus').innerHTML = '';
+    results.innerHTML = `<div class="section-h">${escapeHtml(V().open)} · ${open.length} <button class="ghost-btn" id="backAll">back</button></div>` + cardsHtml(open);
+    kbIndex = -1;
+    results.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  // ---------- cards ----------
+  function strip(h, days) {
+    const set = new Set(sum(h).activeDays || []);
+    let out = '';
+    for (let i = days - 1; i >= 0; i--) {
+      const d = localDay(Date.now() - i * DAY);
+      out += `<i class="${set.has(d) ? 'on' : ''}" title="${d}"></i>`;
+    }
+    return `<div class="strip" aria-hidden="true">${out}</div>`;
+  }
+
+  function cardsHtml(hits, opts = {}) {
+    return hits.map((h, i) => {
+      const isT = h.docType === 'transcript';
+      const s = sum(h);
+      const nDays = (s.activeDays || []).length;
+      const hl = health(h);
+      return `
+      <div class="hit ${h.docType} ${h.flags || ''}" data-type="${h.docType}" data-id="${escapeHtml(h.docId)}">
+        <div class="hit-meta">
+          ${opts.grid && theme === 'race' ? `<span class="badge pos">P${i + 1}</span>` : ''}
+          ${activeType ? '' : `<span class="badge">${h.docType}</span>`}
+          ${hasFlag(h, 'archived') ? `<span class="badge">${escapeHtml(V().archived.toLowerCase())}</span>` : ''}
+          ${h.date ? `<span class="hit-date">${h.date}</span>` : ''}
+          ${isT && h.lastActive ? `<span class="last-active">· active ${timeAgo(h.lastActive)}</span>` : ''}
+          ${isT && nDays ? `<span class="last-active" title="${escapeHtml(daysLabel(nDays))}">· ${daysShort(nDays)}</span>` : ''}
+        </div>
+        ${isT ? `<div class="sid-row"><span class="sid-label">session</span><span class="session-id">${escapeHtml(h.docId)}</span></div>` : ''}
+        <p class="hit-title">${isT ? `<span class="dot ${hl}" title="${escapeHtml(V()[hl])}"></span>` : ''}${escapeHtml(h.title)}</p>
+        ${ticketsOf(h).length ? `<div class="chips">
+          ${ticketsOf(h).map(t => `<span class="badge ticket" data-ticket="${escapeHtml(t)}" title="Ticket view: ${escapeHtml(t)}">${escapeHtml(t)}</span>`).join('')}
+        </div>` : ''}
+        ${(reposOf(h).length || (h.prs || []).length) ? `<div class="chips">
+          ${reposOf(h).slice(0, 3).map(r => `<span class="badge repo" data-repo="${escapeHtml(r)}" title="Repo view: ${escapeHtml(r)}">⎇ ${escapeHtml(r)}</span>`).join('')}
+          ${(h.prs || []).map(u => `<a class="badge pr" href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(prLabel(u))}</a>`).join('')}
+        </div>` : ''}
+        ${s.note ? `<p class="note">${escapeHtml(s.note)}</p>` : ''}
+        ${h.subtitle && !h.snippet ? `<p class="hit-subtitle">${escapeHtml(h.subtitle)}</p>` : ''}
+        ${h.snippet ? `<p class="hit-snip">${renderSnippet(h.snippet)}</p>` : ''}
+        ${isT ? strip(h, opts.grid ? 50 : 90) : ''}
+        ${isT ? `
+          <div class="hit-footer">
+            <button class="icon-btn first ${hasFlag(h, 'pinned') ? 'on' : ''}" data-act="pin" title="${hasFlag(h, 'pinned') ? V().unpin : V().pin}" aria-pressed="${hasFlag(h, 'pinned')}">📌</button>
+            <button class="icon-btn" data-act="archive" title="${hasFlag(h, 'archived') ? V().unarchive : V().archive + ' (hide; restore from the Archived section)'}">${hasFlag(h, 'archived') ? '♻️' : '🗑️'}</button>
+            <button class="icon-btn" data-act="copy" title="Copy: claude --resume ${escapeHtml(h.docId)}" aria-label="Copy resume command">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // Browse (no query): pinned grid, then recent, archived tucked away. Search: flat relevance list.
+  function renderHits(hits, emptyMessage, browse) {
+    if (filter) hits = hits.filter(h => filter.kind === 'ticket' ? ticketsOf(h).includes(filter.value) : reposOf(h).includes(filter.value));
+    kbIndex = -1;
+    if (!hits.length) {
+      results.innerHTML = `<div class="empty">${filter ? `nothing for ${escapeHtml(filter.value)}` : emptyMessage}</div>`;
+      return;
+    }
+    if (!browse) { results.innerHTML = cardsHtml(hits); return; }
+
+    const pinned = hits.filter(h => hasFlag(h, 'pinned') && !hasFlag(h, 'archived'));
+    const archived = hits.filter(h => hasFlag(h, 'archived'));
+    const rest = hits.filter(h => !pinned.includes(h) && !archived.includes(h));
+    const v = V();
+    let html = '';
+    if (pinned.length) {
+      html += sectionHead('pinned', v.pinned, pinned.length);
+      if (!collapsed.pinned) html += `<div class="grid-cards">${cardsHtml(pinned, { grid: true })}</div>`;
+    }
+    if (rest.length) {
+      html += sectionHead('recent', pinned.length ? v.recent : v.all, rest.length);
+      if (!collapsed.recent) html += cardsHtml(rest);
+    }
+    if (archived.length) {
+      html += `<div class="section-h">${v.archived} · ${archived.length} <button class="ghost-btn" id="toggleArchived">${showArchived ? 'hide' : 'show'}</button></div>`;
+      if (showArchived) html += cardsHtml(archived);
+    }
+    results.innerHTML = html;
+  }
+
+  // ---------- ticket / repo focus view ----------
+  function updateFilterBar() {
+    $('activeFilterLabel').textContent = filter ? (filter.kind === 'repo' ? '⎇ ' : '') + filter.value : '';
+    $('activeFilter').classList.toggle('on', !!filter);
+  }
+
+  async function setFilter(f) {
+    filter = f; updateFilterBar();
+    await renderFocus();
+    await runSearch();
+    if (f) window.scrollTo({ top: $('focus').offsetTop - 12, behavior: 'smooth' });
+  }
+
+  async function renderFocus() {
+    const el = $('focus');
+    if (!filter) { el.innerHTML = ''; return; }
+    const match = h => filter.kind === 'ticket' ? ticketsOf(h).includes(filter.value) : reposOf(h).includes(filter.value);
+    const sessions = transcripts.filter(match)
+      .sort((a, b) => (sum(a).firstActive || a.date || '').localeCompare(sum(b).firstActive || b.date || ''));
+    const prs = [...new Set(sessions.flatMap(h => h.prs || []))];
+    let mem = [];
+    try { mem = await (await fetch(`/api/search?type=memory&limit=8&q=${encodeURIComponent(filter.value)}`)).json(); } catch {}
+    const span = h => { const d = sum(h).activeDays || []; return d.length ? `${d[0]} → ${d[d.length - 1]} · ${daysLabel(d.length)}` : (h.date || ''); };
+    el.innerHTML = `
+      <div class="focus-panel">
+        <h2>${filter.kind === 'repo' ? '⎇ ' : '🎫 '}${escapeHtml(filter.value)}</h2>
+        <div class="focus-grid">
+          <div>
+            <h3>Sessions · ${sessions.length}</h3>
+            ${sessions.length ? `<ul class="timeline">${sessions.map(h => `
+              <li data-open="${escapeHtml(h.docId)}"><div class="tl-name"><span class="dot ${health(h)}" style="margin-right:6px"></span>${escapeHtml(h.title)}</div>
+              <div class="tl-when">${escapeHtml(span(h))}</div></li>`).join('')}</ul>` : '<div class="empty">no sessions</div>'}
+          </div>
+          <div>
+            <h3>Memory · ${mem.length}</h3>
+            <ul class="link-list">${mem.map(m => `<li><button class="link-btn" data-mem="${escapeHtml(m.docId)}">${escapeHtml(m.docId)}</button><div class="d">${escapeHtml(m.title)}</div></li>`).join('') || '<li class="d">none</li>'}</ul>
+            <h3>Pull requests · ${prs.length}</h3>
+            <ul class="link-list">${prs.map(u => `<li><a href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(u.replace(/^https:\/\/github\.com\//, ''))}</a></li>`).join('') || '<li class="d">none recorded</li>'}</ul>
+            <div id="focusMem"></div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ---------- detail drawer ----------
+  async function openDrawer(id) {
+    const h = transcripts.find(x => x.docId === id);
+    if (!h) return;
+    const d = $('drawer');
+    $('scrim').classList.add('on'); d.classList.add('on');
+    history.replaceState(null, '', `#s=${id}`);
+    d.innerHTML = `<div class="empty">loading…</div>`;
+    let det = {};
+    try { det = await (await fetch(`/api/session?id=${encodeURIComponent(id)}`)).json(); } catch {}
+    const v = V();
+    const hl = health(h);
+    const primary = (det.memory || []).find(m => m.owned);
+    d.innerHTML = `
+      <div class="drawer-head">
+        <span class="dot ${hl}" style="margin-top:9px" title="${escapeHtml(v[hl])}"></span>
+        <h2>${escapeHtml(h.title)}</h2>
+        <button class="icon-btn" id="dClose" title="Close (esc)">✕</button>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <span class="sid-label">session</span><span class="session-id">${escapeHtml(id)}</span>
+        <button class="ghost-btn" id="dCopy">copy resume</button>
+      </div>
+      <div class="chips" style="margin-bottom:12px">
+        ${ticketsOf(h).map(t => `<span class="badge ticket" data-ticket="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join('')}
+        ${(det.repos || []).map(r => `<span class="badge repo" data-repo="${escapeHtml(r.name)}">⎇ ${escapeHtml(r.name)}</span>`).join('')}
+        ${(h.prs || []).map(u => `<a class="badge pr" href="${escapeHtml(u)}" target="_blank" rel="noopener">${escapeHtml(prLabel(u))}</a>`).join('')}
+      </div>
+
+      <section>
+        <div class="kv">
+          <div><b>${(det.activeDays || []).length}</b>${escapeHtml(v.daysUnit)}</div>
+          <div><b>${det.promptCount ?? '—'}</b>prompts</div>
+          <div><b>${det.costUsd != null ? '$' + det.costUsd.toFixed(0) : '—'}</b>${escapeHtml(v.spend)}</div>
+          <div><b>${det.linesAdded != null ? `+${det.linesAdded}` : '—'}</b>lines${det.linesRemoved != null ? ` / −${det.linesRemoved}` : ''}</div>
+        </div>
+      </section>
+
+      <section><h3>Activity</h3>${heatmap(det.activeDays || [])}</section>
+
+      ${primary?.startHere ? `<section><h3>Start here · ${escapeHtml(primary.name)}</h3><div class="starthere">${escapeHtml(primary.startHere)}</div></section>` : ''}
+      ${h.subtitle ? `<section><h3>Session log</h3><div style="font-size:13px;line-height:1.55;color:var(--muted)">${escapeHtml(h.subtitle)}</div></section>` : ''}
+
+      ${(det.lastPrompts || []).length ? `<section><h3>Where you left off · your last ${det.lastPrompts.length} messages</h3>
+        <ul class="prompts">${det.lastPrompts.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul></section>` : ''}
+
+      <section>
+        <h3>Linked memory · ${(det.memory || []).length}</h3>
+        <ul class="link-list" id="memList">${(det.memory || []).map((m, i) => `<li ${i >= 5 ? 'hidden' : ''}><button class="link-btn" data-mem="${escapeHtml(m.name)}">${escapeHtml(m.name)}</button>${m.owned ? ' <span class="badge">start here</span>' : ''}<div class="d">${escapeHtml(m.description)}</div></li>`).join('') || '<li class="d">no memory file mentions this session</li>'}</ul>
+        ${(det.memory || []).length > 5 ? `<button class="ghost-btn" id="memMore">show all ${det.memory.length}</button>` : ''}
+        <div id="memView"></div>
+      </section>
+
+      ${(det.files || []).length ? `<section><h3>Files touched</h3><ul class="files">${det.files.map(f => `<li><span>${escapeHtml(f.name)}</span><span>×${f.count}</span></li>`).join('')}</ul></section>` : ''}
+
+      <section>
+        <h3>Edit</h3>
+        <div class="field"><label for="eName">Name</label><input id="eName" value="${escapeHtml(h.title)}"></div>
+        <div class="field"><label for="eTickets">Tickets (comma-separated; changing them replaces the auto-detected list)</label><input id="eTickets" value="${escapeHtml(ticketsOf(h).join(', '))}"></div>
+        <div class="field"><label for="eNote">Note (shows on the card)</label><textarea id="eNote">${escapeHtml(det.note || '')}</textarea></div>
+        <div class="row">
+          <button class="primary-btn" id="eSave">Save</button>
+          <button class="ghost-btn" id="ePin">${hasFlag(h, 'pinned') ? v.unpin : v.pin}</button>
+          <button class="ghost-btn" id="eArchive">${hasFlag(h, 'archived') ? v.unarchive : v.archive}</button>
+        </div>
+      </section>`;
+
+    $('dClose').onclick = closeDrawer;
+    if ($('memMore')) $('memMore').onclick = () => { $('memList').querySelectorAll('li[hidden]').forEach(li => li.hidden = false); $('memMore').remove(); };
+    $('dCopy').onclick = () => copyResume(id);
+    $('ePin').onclick = () => adminUpdate({ id, pinned: !hasFlag(h, 'pinned') }, true);
+    $('eArchive').onclick = () => adminUpdate({ id, archived: !hasFlag(h, 'archived') }, true);
+    $('eSave').onclick = () => {
+      const tickets = $('eTickets').value.split(',').map(t => t.trim()).filter(Boolean);
+      const changedTickets = tickets.join(',') !== ticketsOf(h).join(',');
+      const changedName = $('eName').value.trim() !== h.title;
+      adminUpdate({ id, ...(changedName ? { name: $('eName').value } : {}), note: $('eNote').value, ...(changedTickets ? { tickets } : {}) }, true);
+    };
+  }
+
+  function heatmap(days) {
+    const set = new Set(days);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const first = days.length ? new Date(days[0] + 'T00:00:00') : new Date(+today - 90 * DAY);
+    // start on the Sunday on/before the first active day, capped at a year back
+    let start = new Date(Math.max(+first, +today - 364 * DAY));
+    start = new Date(+start - start.getDay() * DAY);
+    let cells = '';
+    for (let t = +start; t <= +today; t += DAY) {
+      const d = localDay(t);
+      cells += `<i class="${set.has(d) ? 'on' : ''}" title="${d}${set.has(d) ? ' · active' : ''}"></i>`;
+    }
+    return `<div class="heat">${cells}</div><div class="heat-legend"><span>${localDay(start)}</span><span>today</span></div>`;
+  }
+
+  function closeDrawer() {
+    $('drawer').classList.remove('on'); $('scrim').classList.remove('on');
+    if (location.hash) history.replaceState(null, '', location.pathname);
+  }
+  $('scrim').addEventListener('click', closeDrawer);
+
+  async function adminUpdate(body, reopen) {
+    const r = await fetch('/api/admin/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) { toast('Save failed'); return; }
+    toast('Saved');
+    await loadTranscripts();
+    await runSearch();
+    if (filter) renderFocus();
+    if (reopen && $('drawer').classList.contains('on')) await openDrawer(body.id);
+  }
+
+  async function showMemory(name, target) {
+    const md = await (await fetch(`/api/memory-file?name=${encodeURIComponent(name)}`)).text();
+    target.innerHTML = `<h3 style="margin-top:12px">${escapeHtml(name)}.md</h3><div class="memdoc">${escapeHtml(md)}</div>`;
+  }
+
+  $('drawer').addEventListener('click', e => {
+    const mem = e.target.closest('[data-mem]');
+    if (mem) { showMemory(mem.dataset.mem, $('memView')); return; }
+    const chip = e.target.closest('.badge.ticket, .badge.repo');
+    if (chip) { closeDrawer(); setFilter(chip.dataset.ticket ? { kind: 'ticket', value: chip.dataset.ticket } : { kind: 'repo', value: chip.dataset.repo }); }
+  });
+
+  // ---------- page interactions ----------
+  async function toggleMemoryExpand(hitEl) {
+    // memory cards expand inline with their markdown
+    let panel = hitEl.querySelector('.memdoc');
+    if (panel) { panel.remove(); return; }
+    panel = document.createElement('div'); panel.className = 'memdoc'; panel.style.marginTop = '10px'; panel.textContent = 'loading…';
+    hitEl.appendChild(panel);
+    const r = await fetch(`/api/memory-file?name=${encodeURIComponent(hitEl.dataset.id)}`);
+    panel.textContent = r.ok ? await r.text() : 'failed to load';
+  }
+
+  document.querySelector('.wrap').addEventListener('click', e => {
+    if (e.target.id === 'toggleArchived') { showArchived = !showArchived; runSearch(); return; }
+    if (e.target.id === 'backAll') { runSearch(); return; }
+    const sec = e.target.closest('.section-h.toggle');
+    if (sec) { toggleSection(sec.dataset.section); return; }
+    const opener = e.target.closest('[data-open]');
+    if (opener) { openDrawer(opener.dataset.open); return; }
+    const mem = e.target.closest('#focus [data-mem]');
+    if (mem) { showMemory(mem.dataset.mem, $('focusMem')); return; }
+
+    const hitEl = e.target.closest('.hit');
+    if (!hitEl) return;
+    if (e.target.closest('.memdoc')) return;
+    const id = hitEl.dataset.id;
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'copy') { copyResume(id); return; }
+    const h = transcripts.find(x => x.docId === id);
+    if (act === 'pin' && h) { adminUpdate({ id, pinned: !hasFlag(h, 'pinned') }); return; }
+    if (act === 'archive' && h) { adminUpdate({ id, archived: !hasFlag(h, 'archived') }); return; }
+    const chip = e.target.closest('.badge.ticket, .badge.repo');
+    if (chip) {
+      const f = chip.dataset.ticket ? { kind: 'ticket', value: chip.dataset.ticket } : { kind: 'repo', value: chip.dataset.repo };
+      setFilter(filter && filter.value === f.value ? null : f); return;
+    }
+    if (e.target.closest('a') || e.target.closest('.session-id')) return;
+    if (hitEl.dataset.type === 'transcript') openDrawer(id); else toggleMemoryExpand(hitEl);
+  });
+
+  function toggleSection(key) {
+    collapsed[key] = !collapsed[key];
+    try { localStorage.setItem('ss-collapsed', JSON.stringify(collapsed)); } catch {}
+    runSearch();
+  }
+  results.addEventListener('keydown', e => {
+    const sec = e.target.closest?.('.section-h.toggle');
+    if (sec && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleSection(sec.dataset.section); }
+  });
+
+  $('clearFilter').addEventListener('click', () => setFilter(null));
+
+  // ---------- search ----------
+  async function loadDump() {
+    const hits = activeType === 'transcript' ? transcripts
+      : await (await fetch(`/api/list?limit=500${activeType ? `&type=${activeType}` : ''}`)).json();
+    renderHits(hits, 'nothing indexed yet', true);
+  }
+
+  async function runSearch() {
+    const query = q.value.trim();
+    if (!query) return loadDump();
+    const r = await fetch(`/api/search?limit=80&q=${encodeURIComponent(query)}${activeType ? `&type=${activeType}` : ''}`);
+    renderHits(await r.json(), 'no matches', false);
+  }
+
+  q.addEventListener('input', () => { clearTimeout(debounceHandle); debounceHandle = setTimeout(runSearch, 200); });
+
+  function syncTabs() { tabs.forEach(b => b.classList.toggle('active', b.dataset.type === activeType)); }
+  tabs.forEach(btn => btn.addEventListener('click', () => { activeType = btn.dataset.type; syncTabs(); runSearch(); }));
+
+  $('reindex').addEventListener('click', async () => {
+    await fetch('/api/reindex', { method: 'POST' });
+    statusEl.textContent = 'indexing…';
+    const wait = setInterval(async () => {
+      const s = await (await fetch('/api/status')).json();
+      if (!s.indexing) { clearInterval(wait); refreshStatus(); await loadTranscripts(); runSearch(); toast('Reindexed'); }
+    }, 1000);
+  });
+
+  $('raceToggle').addEventListener('click', () => {
+    theme = theme === 'race' ? 'normal' : 'race';
+    try { localStorage.setItem('ss-theme', theme); } catch {}
+    applyTheme(); renderDashboard(); runSearch(); if (filter) renderFocus();
+    if (theme === 'race') toast('🏁 Lights out and away we go!');
+  });
+
+  // ---------- ⌘K palette ----------
+  let pSel = 0, pItems = [];
+  function openPalette() { $('paletteWrap').classList.add('on'); $('pq').value = ''; pSel = 0; renderPalette(); $('pq').focus(); }
+  function closePalette() { $('paletteWrap').classList.remove('on'); }
+  function scorePalette(h, terms) {
+    const title = h.title.toLowerCase();
+    const hay = [title, h.ticket, reposOf(h).join(' '), h.docId, sum(h).note || ''].join(' ').toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      if (!hay.includes(t)) return -1;
+      score += title.includes(t) ? (title.startsWith(t) ? 13 : 10) : 2;
+    }
+    return score + (hasFlag(h, 'pinned') ? 2 : 0) - (hasFlag(h, 'archived') ? 5 : 0);
+  }
+  function renderPalette() {
+    const terms = $('pq').value.toLowerCase().split(/\s+/).filter(Boolean);
+    pItems = transcripts
+      .map(h => ({ h, s: terms.length ? scorePalette(h, terms) : (hasFlag(h, 'archived') ? -1 : 1) }))
+      .filter(x => x.s >= 0)
+      .sort((a, b) => b.s - a.s || (b.h.lastActive || '').localeCompare(a.h.lastActive || ''))
+      .slice(0, 12).map(x => x.h);
+    pSel = Math.min(pSel, Math.max(pItems.length - 1, 0));
+    $('plist').innerHTML = pItems.map((h, i) => `
+      <li class="${i === pSel ? 'sel' : ''}" data-i="${i}"><span class="dot ${health(h)}"></span>
+      <span class="pn">${escapeHtml(h.title)}</span><span class="pt">${escapeHtml(ticketsOf(h).slice(0, 3).join(' ') || reposOf(h)[0] || '')}</span></li>`).join('')
+      || '<li style="color:var(--faint)">no match</li>';
+    $('plist').querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+  }
+  function choosePalette(open) {
+    const h = pItems[pSel]; if (!h) return;
+    closePalette();
+    if (open) openDrawer(h.docId); else copyResume(h.docId);
+  }
+  $('pq').addEventListener('input', () => { pSel = 0; renderPalette(); });
+  $('pq').addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { pSel = Math.min(pSel + 1, pItems.length - 1); renderPalette(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { pSel = Math.max(pSel - 1, 0); renderPalette(); e.preventDefault(); }
+    else if (e.key === 'Enter') { choosePalette(e.shiftKey); e.preventDefault(); }
+  });
+  $('plist').addEventListener('click', e => { const li = e.target.closest('[data-i]'); if (li) { pSel = +li.dataset.i; choosePalette(e.shiftKey); } });
+  $('paletteWrap').addEventListener('click', e => { if (e.target.id === 'paletteWrap') closePalette(); });
+  $('openPalette').addEventListener('click', openPalette);
+
+  // ---------- keyboard: / search · j/k move · enter open · c copy · ⌘K jump · esc close ----------
+  function moveKb(delta) {
+    const cards = [...results.querySelectorAll('.hit')];
+    if (!cards.length) return;
+    cards.forEach(c => c.classList.remove('kb'));
+    kbIndex = Math.max(0, Math.min(cards.length - 1, kbIndex + delta));
+    cards[kbIndex].classList.add('kb');
+    cards[kbIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); return; }
+    if (e.key === 'Escape') { if ($('paletteWrap').classList.contains('on')) closePalette(); else closeDrawer(); return; }
+    const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+    if (typing || $('drawer').classList.contains('on') || $('paletteWrap').classList.contains('on')) return;
+    if (e.key === '/') { e.preventDefault(); q.focus(); return; }
+    if (e.key === 'j') moveKb(1);
+    else if (e.key === 'k') moveKb(-1);
+    else if (kbIndex >= 0) {
+      const card = results.querySelectorAll('.hit')[kbIndex];
+      if (!card) return;
+      if (e.key === 'Enter') card.click();
+      else if (e.key === 'c' && card.dataset.type === 'transcript') copyResume(card.dataset.id);
+    }
+  });
+
+  // ---------- boot ----------
+  applyTheme();
+  refreshStatus();
+  loadTranscripts().then(async () => {
+    await runSearch();
+    // deep link: #s=<session id> opens its drawer
+    const m = location.hash.match(/^#s=([0-9a-f-]{8,36})/i);
+    if (m) { const h = transcripts.find(x => x.docId.startsWith(m[1])); if (h) openDrawer(h.docId); }
+  });
+</script>
+</body>
+</html>

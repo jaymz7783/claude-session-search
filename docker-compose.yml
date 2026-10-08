@@ -1,0 +1,19 @@
+services:
+  session-search:
+    build: .
+    ports:
+      # localhost only: transcripts can contain secrets, and the admin endpoints have no auth
+      - "127.0.0.1:5299:8080"
+    volumes:
+      - ${SESSION_DATA_DIR:?set SESSION_DATA_DIR in .env (see .env.example)}:/data:ro
+      - session-search-db:/db
+      # the one file the admin UI may write (rename / pin / archive / tickets / notes)
+      - ${SESSION_DATA_DIR}/memory/session_names.json:/config/session_names.json
+    environment:
+      NAMES_PATH: /config/session_names.json
+      REPOS_ROOT: ${REPOS_ROOT:-}
+      HOME_DIR: ${HOME}
+    restart: unless-stopped
+
+volumes:
+  session-search-db:
